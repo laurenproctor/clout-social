@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchGdeltSignalsSequential } from '@/lib/gdelt';
+import { fetchGdeltMetricsBQ, isBigQueryConfigured } from '@/lib/gdeltBigquery';
 import { upsertSignalMetric } from '@/lib/signalMetricsStore';
 import { MOCK_SIGNALS } from '@/lib/mockSignals';
 
@@ -31,9 +32,15 @@ export async function GET(req: Request) {
 
   const topics = MOCK_SIGNALS.map((s) => s.topic);
   const startedAt = new Date().toISOString();
+  // BigQuery when configured (works from Vercel's IP; one scan for all topics);
+  // otherwise the sequential HTTP path (works only from a non-throttled IP).
+  const via = isBigQueryConfigured() ? 'bigquery' : 'http';
 
   try {
-    const results = await fetchGdeltSignalsSequential(topics);
+    const results =
+      via === 'bigquery'
+        ? await fetchGdeltMetricsBQ(topics)
+        : await fetchGdeltSignalsSequential(topics);
 
     let refreshed = 0;
     let live = 0;
@@ -55,6 +62,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      via,
       startedAt,
       finishedAt: new Date().toISOString(),
       topics: topics.length,

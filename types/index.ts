@@ -41,6 +41,37 @@ export interface BrandGuidelines {
   ctaFormat?: string;
 }
 
+/** Visual identity used to render branded social imagery and video. */
+export type BrandStyle = 'bold' | 'minimal' | 'gradient' | 'editorial' | 'playful';
+
+export interface BrandKit {
+  brandName: string;
+  tagline: string;
+  /** Hex colors. */
+  primaryColor: string;
+  accentColor: string;
+  backgroundColor: string;
+  textColor: string;
+  /** Keys into the curated font-stack map (see lib/brandFonts). */
+  displayFont: string;
+  bodyFont: string;
+  style: BrandStyle;
+  /** Uploaded logo stored as a data URL (kept in localStorage, never sent to a server). */
+  logoDataUrl?: string;
+}
+
+export const DEFAULT_BRAND_KIT: BrandKit = {
+  brandName: 'Clout',
+  tagline: 'Signal intelligence for modern brands',
+  primaryColor: '#10B981',
+  accentColor: '#34D399',
+  backgroundColor: '#0F172A',
+  textColor: '#F8FAFC',
+  displayFont: 'grotesk',
+  bodyFont: 'humanist',
+  style: 'bold',
+};
+
 export type DripStage = 'breaking' | 'deepdive' | 'playbook';
 
 export interface DripPost {

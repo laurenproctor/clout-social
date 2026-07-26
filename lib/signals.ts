@@ -1,5 +1,6 @@
 import { LifecycleStage, SignalItem } from '@/types';
 import { calculateOpportunityScore, fetchGdeltSignal } from '@/lib/gdelt';
+import { fetchGdeltMetricsBQ, isBigQueryConfigured } from '@/lib/gdeltBigquery';
 import { getSignalMetric, getSignalMetricsMap } from '@/lib/signalMetricsStore';
 import { MOCK_SIGNALS } from '@/lib/mockSignals';
 import { slug } from '@/lib/slug';
@@ -91,9 +92,15 @@ const FACET_TONE_DELTA = [0, 0.4, -0.6, 0.2, -0.3];
  */
 export async function buildLiveSignals(keyword: string): Promise<BuiltSignals> {
   const cached = await getSignalMetric(keyword);
-  const primary = cached
-    ? { topic: keyword, volumeShare: cached.volumeShare, sentimentTone: cached.sentimentTone, live: true }
-    : await fetchGdeltSignal(keyword);
+  let primary: { topic: string; volumeShare: number; sentimentTone: number; live: boolean };
+  if (cached) {
+    primary = { topic: keyword, volumeShare: cached.volumeShare, sentimentTone: cached.sentimentTone, live: true };
+  } else if (isBigQueryConfigured()) {
+    // BigQuery works from Vercel's IP (GDELT's HTTP API does not).
+    primary = (await fetchGdeltMetricsBQ([keyword]))[0];
+  } else {
+    primary = await fetchGdeltSignal(keyword);
+  }
 
   const facets = relatedFacets(keyword);
   const seen = new Set<string>();

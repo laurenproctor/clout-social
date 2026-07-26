@@ -1,9 +1,10 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { BrandGuidelines } from '@/types';
+import { BrandGuidelines, BrandKit, DEFAULT_BRAND_KIT } from '@/types';
 
 const STORAGE_KEY = 'clout.brandGuidelines';
+const KIT_KEY = 'clout.brandKit';
 
 const EMPTY: BrandGuidelines = {
   tone: '',
@@ -14,6 +15,8 @@ const EMPTY: BrandGuidelines = {
 
 interface BrandContextValue {
   brand: BrandGuidelines;
+  /** Visual brand kit (colors, fonts, logo, style) used for asset generation. */
+  kit: BrandKit;
   /** True once localStorage has been read (avoids SSR/first-paint flip). */
   hydrated: boolean;
   /** True when at least one guideline field is set. */
@@ -21,6 +24,8 @@ interface BrandContextValue {
   setBrand: (brand: BrandGuidelines) => void;
   updateBrand: (patch: Partial<BrandGuidelines>) => void;
   clearBrand: () => void;
+  updateKit: (patch: Partial<BrandKit>) => void;
+  resetKit: () => void;
 }
 
 const BrandContext = createContext<BrandContextValue | null>(null);
@@ -44,6 +49,7 @@ function persist(b: BrandGuidelines) {
 
 export function BrandProvider({ children }: { children: React.ReactNode }) {
   const [brand, setBrandState] = useState<BrandGuidelines>(EMPTY);
+  const [kit, setKitState] = useState<BrandKit>(DEFAULT_BRAND_KIT);
   const [hydrated, setHydrated] = useState(false);
 
   // Hydrate from localStorage on mount.
@@ -61,7 +67,34 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* ignore malformed storage */
     }
+    try {
+      const rawKit = localStorage.getItem(KIT_KEY);
+      if (rawKit) setKitState({ ...DEFAULT_BRAND_KIT, ...JSON.parse(rawKit) });
+    } catch {
+      /* ignore malformed storage */
+    }
     setHydrated(true);
+  }, []);
+
+  const updateKit = useCallback((patch: Partial<BrandKit>) => {
+    setKitState((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        localStorage.setItem(KIT_KEY, JSON.stringify(next));
+      } catch {
+        /* storage unavailable — keep in-memory only */
+      }
+      return next;
+    });
+  }, []);
+
+  const resetKit = useCallback(() => {
+    setKitState(DEFAULT_BRAND_KIT);
+    try {
+      localStorage.removeItem(KIT_KEY);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const setBrand = useCallback((next: BrandGuidelines) => {
@@ -88,7 +121,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BrandContext.Provider
-      value={{ brand, hydrated, hasGuidelines: isMeaningful(brand), setBrand, updateBrand, clearBrand }}
+      value={{ brand, kit, hydrated, hasGuidelines: isMeaningful(brand), setBrand, updateBrand, clearBrand, updateKit, resetKit }}
     >
       {children}
     </BrandContext.Provider>
