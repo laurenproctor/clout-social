@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { MOCK_SIGNALS } from '@/lib/mockSignals';
 import { SignalItem } from '@/types';
-import { SignalHeatmap } from '@/components/dashboard/SignalHeatmap';
+import { SignalHeatmap, HeatmapDimension } from '@/components/dashboard/SignalHeatmap';
 import { SignalDetailModal } from '@/components/dashboard/SignalDetailModal';
 import { BriefingWidget } from '@/components/dashboard/BriefingWidget';
 import { SignalsToWatchWidget } from '@/components/dashboard/SignalsToWatchWidget';
@@ -11,8 +11,16 @@ import { AuthButton } from '@/components/auth/AuthButton';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import Link from 'next/link';
-import { Search, Radio, Bell, Zap, BarChart3, Loader2, AlertTriangle, Bookmark, ShieldAlert, Menu, X } from 'lucide-react';
+import { Search, Radio, Bell, Zap, BarChart3, Loader2, AlertTriangle, Bookmark, ShieldAlert, Menu, X, Flame, Target, Smile, Activity } from 'lucide-react';
 import { SAVED_KEY, loadSavedIds } from '@/lib/savedSignals';
+
+// Top sub-navigation dimensions — each re-sorts + re-colors the heatmap.
+const DIMENSION_TABS: { key: HeatmapDimension; label: string; icon: typeof Flame }[] = [
+  { key: 'market-heat', label: 'Market heat', icon: Flame },
+  { key: 'content-opportunity', label: 'Content opportunity', icon: Target },
+  { key: 'sentiment', label: 'Sentiment', icon: Smile },
+  { key: 'lifecycle', label: 'Lifecycle', icon: Activity },
+];
 
 export default function Home() {
   // Seed with curated topics for instant first paint; replaced by live GDELT data.
@@ -31,6 +39,8 @@ export default function Home() {
   const [reauthAlerts, setReauthAlerts] = useState<{ postId: string; platform?: string; error?: string }[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Active heatmap dimension driving tile sort/color + the footer legend.
+  const [dimension, setDimension] = useState<HeatmapDimension>('lifecycle');
 
   useEffect(() => {
     setSavedIds(loadSavedIds());
@@ -282,6 +292,29 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Sub-navigation — switch the heatmap's active dimension */}
+          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-800/60 -mt-2">
+            {DIMENSION_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const active = dimension === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setDimension(tab.key)}
+                  aria-pressed={active}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold whitespace-nowrap border-b-2 -mb-px transition ${
+                    active
+                      ? 'border-emerald-500 text-emerald-400'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
           {error && (
             <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-xl text-amber-300 text-xs flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -315,6 +348,7 @@ export default function Home() {
                   onSelectSignal={(s) => setSelectedSignal(s)}
                   savedIds={savedIds}
                   onToggleSave={toggleSaved}
+                  dimension={dimension}
                 />
               )}
             </div>

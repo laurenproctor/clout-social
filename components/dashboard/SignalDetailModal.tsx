@@ -29,11 +29,17 @@ import {
   Youtube,
   Music2,
   FileText,
+  Palette,
+  ImageIcon,
+  Clapperboard,
+  Trash2,
 } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
 import { useBrand } from '@/components/brand/BrandProvider';
 import { useAccounts } from '@/components/accounts/AccountsProvider';
 import { PostPreview, PreviewAuthor } from '@/components/dashboard/PostPreview';
+import { renderBrandCard } from '@/lib/brandCanvas';
+import { NETWORK_FORMATS } from '@/lib/networkFormats';
 import {
   getPlusHours,
   getTomorrowMorning,
@@ -85,6 +91,17 @@ interface MediaItem {
   type: string;
   name: string;
   preview: string;
+}
+
+// A per-network branded asset (from the Brand Studio kit) attached to a post.
+interface BrandAsset {
+  imagePreview?: string; // data URL for the preview render
+  imageUrl?: string; // public URL once uploaded (publishable to Zernio)
+  imageAi?: boolean; // true when a real AI background was composited
+  videoUrl?: string; // public URL from the video route
+  genImg?: boolean;
+  genVid?: boolean;
+  error?: string;
 }
 
 interface NetworkPost {
