@@ -93,23 +93,6 @@ export default function Home() {
     loadSignals();
   }, [loadSignals]);
 
-  // Deep link: ?signal=<id> opens that signal's modal (from Briefs "Develop content").
-  const [pendingSignalId, setPendingSignalId] = useState<string | null>(null);
-  useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('signal');
-    if (id) setPendingSignalId(id);
-  }, []);
-  useEffect(() => {
-    if (!pendingSignalId) return;
-    const match = signals.find((s) => s.id === pendingSignalId);
-    if (match) {
-      setSelectedSignal(match);
-      setPendingSignalId(null);
-      // Drop the param so a later refresh doesn't reopen the modal.
-      window.history.replaceState(null, '', window.location.pathname);
-    }
-  }, [pendingSignalId, signals]);
-
   // Instant, offline client-side filter of the currently loaded tiles.
   const filteredSignals = signals.filter(
     (s) =>
