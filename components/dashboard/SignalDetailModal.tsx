@@ -167,7 +167,10 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { brand } = useBrand();
+  // Per-network branded assets generated from the Brand Studio kit.
+  const [brandAssets, setBrandAssets] = useState<Partial<Record<SocialPlatform, BrandAsset>>>({});
+
+  const { brand, kit } = useBrand();
   const { accounts, selectedAccounts } = useAccounts();
 
   // Close on Escape.
@@ -191,6 +194,7 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
     setSelectedAngle(null);
     setSelectedNetworks(['linkedin']);
     setPosts({});
+    setBrandAssets({});
     setPublishReceipts(null);
     setPublishError(null);
   }, [signal?.id]);
@@ -201,6 +205,24 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
   const sentiment = sentimentBadge(signal.sentimentTone);
   const SentimentIcon = sentiment.Icon;
   const mediaUrls = media.map((m) => m.url);
+
+  const isPublicUrl = (u?: string): u is string => Boolean(u && /^https?:/.test(u));
+
+  // Preview media for a network: its branded asset if present, else the shared uploads.
+  const mediaFor = (net: SocialPlatform): MediaItem[] => {
+    const ba = brandAssets[net];
+    if (ba?.imagePreview) {
+      return [{ url: ba.imageUrl || ba.imagePreview, type: 'image/png', name: `brand-${net}.png`, preview: ba.imagePreview }];
+    }
+    return media;
+  };
+
+  // Publishable media URLs for a network: branded public URLs, else the shared uploads.
+  const mediaUrlsFor = (net: SocialPlatform): string[] => {
+    const ba = brandAssets[net];
+    const urls = [ba?.imageUrl, ba?.videoUrl].filter(isPublicUrl);
+    return urls.length ? urls : mediaUrls;
+  };
 
   const connectedFor = (net: SocialPlatform) => accounts.filter((a) => a.platform === net && a.connected);
 
@@ -284,6 +306,102 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
       ...prev,
       [net]: { content, hashtags: prev[net]?.hashtags ?? '', generating: false },
     }));
+
+  /* --------------------------- branded assets ----------------------------- */
+
+  const patchAsset = (net: SocialPlatform, patch: Partial<BrandAsset>) =>
+    setBrandAssets((prev) => ({ ...prev, [net]: { ...prev[net], ...patch } }));
+
+  const dataUrlToFile = async (dataUrl: string, name: string): Promise<File> => {
+    const blob = await (await fetch(dataUrl)).blob();
+    return new File([blob], name, { type: blob.type || 'image/png' });
+  };
+
+  // Compose an on-brand graphic for a network: AI background (best effort) +
+  // the brand-kit template, then upload it so it can publish to Zernio.
+  const generateBrandImage = async (net: SocialPlatform) => {
+    const format = NETWORK_FORMATS[net];
+    const headline = selectedAngle || signal.topic;
+    patchAsset(net, { genImg: true, error: undefined });
+
+    let backgroundSrc: string | undefined;
+    let imageAi = false;
+    try {
+      const res = await fetch('/api/brand/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: signal.topic,
+          angle: selectedAngle,
+          network: format.label,
+          style: kit.style,
+          primaryColor: kit.primaryColor,
+          accentColor: kit.accentColor,
+          backgroundColor: kit.backgroundColor,
+          aspectRatio: format.imageAspect,
+        }),
+      });
+      const data = await res.json();
+      if (data.image) {
+        backgroundSrc = data.image;
+        imageAi = true;
+      }
+    } catch {
+      /* fall back to a templated brand background */
+    }
+
+    let imagePreview: string;
+    try {
+      imagePreview = await renderBrandCard({ format, kit, headline, eyebrow: signal.topic, backgroundSrc });
+    } catch {
+      patchAsset(net, { genImg: false, error: 'Could not render the brand graphic.' });
+      return;
+    }
+
+    // Upload for a public, publishable URL (best effort — preview still works if it fails).
+    let imageUrl: string | undefined;
+    try {
+      imageUrl = await uploadOne(await dataUrlToFile(imagePreview, `brand-${net}-${signal.id}.png`));
+    } catch {
+      /* keep the data-URL preview; it just won't be publishable */
+    }
+    patchAsset(net, { imagePreview, imageUrl, imageAi, genImg: false });
+  };
+
+  // Text/image-to-video branded clip, seeded from this network's brand image.
+  const generateBrandVideo = async (net: SocialPlatform) => {
+    const format = NETWORK_FORMATS[net];
+    patchAsset(net, { genVid: true, error: undefined });
+    try {
+      const res = await fetch('/api/brand/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: signal.topic,
+          angle: selectedAngle,
+          network: format.label,
+          style: kit.style,
+          primaryColor: kit.primaryColor,
+          accentColor: kit.accentColor,
+          backgroundColor: kit.backgroundColor,
+          videoAspect: format.videoAspect,
+          seedImage: brandAssets[net]?.imagePreview,
+        }),
+      });
+      const data = await res.json();
+      if (data.video) patchAsset(net, { videoUrl: data.video, genVid: false });
+      else patchAsset(net, { genVid: false, error: data.error || 'Video generation failed.' });
+    } catch {
+      patchAsset(net, { genVid: false, error: 'Network error generating video.' });
+    }
+  };
+
+  const clearBrandAsset = (net: SocialPlatform) =>
+    setBrandAssets((prev) => {
+      const next = { ...prev };
+      delete next[net];
+      return next;
+    });
 
   /* -------------------------------- media --------------------------------- */
 
@@ -406,7 +524,7 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
           body: JSON.stringify({
             accountIds: ids,
             content,
-            mediaUrls,
+            mediaUrls: mediaUrlsFor(net),
             scheduledAt,
             topic: signal.topic,
             opportunityScore: signal.opportunityScore,
@@ -635,7 +753,17 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
                       ? 'Regenerate all'
                       : `Generate ${selectedNetworks.length} post${selectedNetworks.length === 1 ? '' : 's'}`}
                 </button>
-                <span className="text-[11px] text-slate-500">AI drafts one post per selected network.</span>
+                <span className="text-[11px] text-slate-500">
+                  AI drafts one post per network. Add on-brand visuals with{' '}
+                  <span className="inline-flex items-center gap-0.5 text-slate-400">
+                    <ImageIcon className="w-3 h-3" /> Brand image
+                  </span>{' '}
+                  below —{' '}
+                  <Link href="/settings" className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-0.5">
+                    <Palette className="w-3 h-3" /> edit kit
+                  </Link>
+                  .
+                </span>
               </div>
 
               {/* Previews */}
@@ -643,6 +771,7 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {selectedNetworks.map((net) => {
                     const post = posts[net];
+                    const asset = brandAssets[net];
                     const meta = NETWORKS.find((n) => n.id === net)!;
                     const Icon = meta.Icon;
                     const len = post ? fullContent(net).length : 0;
@@ -675,7 +804,7 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
                               platform={net}
                               content={post.content}
                               hashtags={post.hashtags}
-                              media={media}
+                              media={mediaFor(net)}
                               author={authorFor(net)}
                               topic={signal.topic}
                               title={selectedAngle ?? undefined}
@@ -687,6 +816,52 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
                               aria-label={`Edit ${meta.label} post`}
                               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
                             />
+
+                            {/* Branded asset controls (from the Brand Studio kit) */}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={() => generateBrandImage(net)}
+                                disabled={asset?.genImg}
+                                className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-800 disabled:opacity-50 transition"
+                              >
+                                {asset?.genImg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />}
+                                {asset?.imagePreview ? 'Regenerate image' : 'Brand image'}
+                              </button>
+                              <button
+                                onClick={() => generateBrandVideo(net)}
+                                disabled={asset?.genVid}
+                                title="Generate a branded video clip via the AI Gateway"
+                                className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-800 disabled:opacity-50 transition"
+                              >
+                                {asset?.genVid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clapperboard className="w-3.5 h-3.5 text-emerald-400" />}
+                                {asset?.videoUrl ? 'Regenerate video' : 'Brand video'}
+                              </button>
+                              {asset?.imageAi && (
+                                <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                                  AI background
+                                </span>
+                              )}
+                              {asset?.videoUrl && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-300 bg-sky-500/15 border border-sky-500/30 px-1.5 py-0.5 rounded">
+                                  <Clapperboard className="w-3 h-3" /> video attached
+                                </span>
+                              )}
+                              {(asset?.imagePreview || asset?.videoUrl) && (
+                                <button
+                                  onClick={() => clearBrandAsset(net)}
+                                  aria-label={`Remove branded asset for ${meta.label}`}
+                                  className="ml-auto text-slate-500 hover:text-red-300"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                            {asset?.imagePreview && !asset.imageUrl && (
+                              <p className="text-[10px] text-amber-300">Preview only — image upload failed, so it won&apos;t publish.</p>
+                            )}
+                            {asset?.error && (
+                              <p className="text-[10px] text-red-300">{asset.error}</p>
+                            )}
                           </>
                         ) : (
                           <div className="h-40 rounded-xl bg-slate-800/20 border border-dashed border-slate-800 flex items-center justify-center text-slate-500 text-xs text-center px-4">
@@ -797,7 +972,7 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
                 {accounts.length === 0 && (
                   <p className="text-[11px] text-amber-300">
                     No connected accounts —{' '}
-                    <Link href="/studio" className="underline hover:text-amber-200">
+                    <Link href="/content" className="underline hover:text-amber-200">
                       connect accounts in Content Studio
                     </Link>
                   </p>

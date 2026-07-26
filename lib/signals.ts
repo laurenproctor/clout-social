@@ -132,11 +132,16 @@ export async function buildEnrichedDefaults(): Promise<BuiltSignals> {
     live = true;
     const volumeShare = Math.round(m.volumeShare);
     const sentimentTone = m.sentimentTone;
+    // Re-derive lifecycle + window from the live volume so the tile's badge
+    // stays consistent with its live number (not the curated seed).
+    const lifecycle = deriveLifecycle(volumeShare);
     return {
       ...base,
       volumeShare,
       sentimentTone,
       opportunityScore: calculateOpportunityScore(volumeShare, sentimentTone),
+      lifecycle,
+      authorityWindowDays: AUTHORITY_WINDOW[lifecycle],
     };
   });
 

@@ -96,7 +96,7 @@ export default function AnalyticsPage() {
           <Link href="/" aria-label="Signals" className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 font-medium transition">
             <Radio className="w-4 h-4" /> <span className="hidden sm:inline">Signals</span>
           </Link>
-          <Link href="/studio" aria-label="Content Studio" className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 font-medium transition">
+          <Link href="/content" aria-label="Content Studio" className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 font-medium transition">
             <Zap className="w-4 h-4" /> <span className="hidden sm:inline">Content Studio</span>
           </Link>
           <span className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20">
