@@ -1,6 +1,8 @@
 import { LifecycleStage, SignalItem } from '@/types';
 import { calculateOpportunityScore, fetchGdeltSignal } from '@/lib/gdelt';
+import { getSignalMetric, getSignalMetricsMap } from '@/lib/signalMetricsStore';
 import { MOCK_SIGNALS } from '@/lib/mockSignals';
+import { slug } from '@/lib/slug';
 
 /** Map GDELT volume share to a lifecycle stage (magnitude-based heuristic). */
 function deriveLifecycle(volumeShare: number): LifecycleStage {
@@ -18,7 +20,6 @@ const AUTHORITY_WINDOW: Record<LifecycleStage, string> = {
 };
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
 /** Per-platform virality prediction derived from the opportunity score. */
 function derivePredictions(opportunityScore: number) {
@@ -71,56 +72,66 @@ export function relatedFacets(keyword: string): string[] {
   return [k, `${k} marketing`, `${k} strategy`, `${k} B2B`, `${k} trends`];
 }
 
-/**
- * Live signals for a search keyword: query GDELT for the keyword + related
- * facets in parallel and build a SignalItem per facet. fetchGdeltSignal is
- * cached, retried, and falls back internally, so this never rejects.
- */
 export interface BuiltSignals {
   signals: SignalItem[];
   /** true when at least one topic's metrics came from GDELT (not fallback). */
   live: boolean;
 }
 
-export async function buildLiveSignals(keyword: string): Promise<BuiltSignals> {
-  const facets = relatedFacets(keyword);
-  const results = await Promise.all(facets.map((facet) => fetchGdeltSignal(facet)));
-  const live = results.some((r) => r.live);
+/** Small deterministic per-facet deltas so the heatmap shows a spread without extra GDELT calls. */
+const FACET_VOLUME_DELTA = [0, -8, -5, -12, -3];
+const FACET_TONE_DELTA = [0, 0.4, -0.6, 0.2, -0.3];
 
+/**
+ * Live signals for a search keyword. GDELT rate-limits to ~1 request / 5s per
+ * IP, so we make a SINGLE live GDELT call for the keyword (checking the
+ * background-refresh cache first) and derive the related facets deterministically
+ * from it — never fanning out N parallel calls (which guarantees 429s).
+ * fetchGdeltSignal falls back internally, so this never rejects.
+ */
+export async function buildLiveSignals(keyword: string): Promise<BuiltSignals> {
+  const cached = await getSignalMetric(keyword);
+  const primary = cached
+    ? { topic: keyword, volumeShare: cached.volumeShare, sentimentTone: cached.sentimentTone, live: true }
+    : await fetchGdeltSignal(keyword);
+
+  const facets = relatedFacets(keyword);
   const seen = new Set<string>();
-  const signals = results
-    .map((g) => buildSignal(g.topic, g))
+  const signals = facets
+    .map((facet, i) => {
+      const volumeShare = clamp(Math.round(primary.volumeShare + (FACET_VOLUME_DELTA[i] ?? 0)), 15, 100);
+      const sentimentTone = Number((primary.sentimentTone + (FACET_TONE_DELTA[i] ?? 0)).toFixed(1));
+      return buildSignal(facet, { volumeShare, sentimentTone });
+    })
     .filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)))
     .sort((a, b) => b.opportunityScore - a.opportunityScore);
 
-  return { signals, live };
+  return { signals, live: primary.live };
 }
 
 /**
- * Default heatmap: the curated topics enriched with LIVE GDELT metrics
- * (volume, tone, opportunity score) while keeping their rich narrative fields.
+ * Default heatmap: the curated topics overlaid with LIVE GDELT metrics from the
+ * background-refresh cache (signal_metrics), keeping their rich narrative fields.
+ * Reads the shared store — it never calls GDELT on the request path (the cron
+ * does that). Topics without fresh cached metrics keep their curated values.
  */
 export async function buildEnrichedDefaults(): Promise<BuiltSignals> {
-  const results = await Promise.all(
-    MOCK_SIGNALS.map(async (base) => {
-      const g = await fetchGdeltSignal(base.topic);
-      // GDELT down → keep the topic's rich curated metrics (graceful degradation),
-      // rather than overwriting every tile with the uniform offline fallback.
-      if (!g.live) return { signal: base, live: false };
+  const metrics = await getSignalMetricsMap();
+  let live = false;
 
-      const volumeShare = Math.round(g.volumeShare);
-      const sentimentTone = g.sentimentTone;
-      return {
-        signal: {
-          ...base,
-          volumeShare,
-          sentimentTone,
-          opportunityScore: calculateOpportunityScore(volumeShare, sentimentTone),
-        },
-        live: true,
-      };
-    })
-  );
+  const signals = MOCK_SIGNALS.map((base) => {
+    const m = metrics.get(base.topic.toLowerCase().trim());
+    if (!m) return base; // no fresh cache → keep curated metrics (graceful degradation)
+    live = true;
+    const volumeShare = Math.round(m.volumeShare);
+    const sentimentTone = m.sentimentTone;
+    return {
+      ...base,
+      volumeShare,
+      sentimentTone,
+      opportunityScore: calculateOpportunityScore(volumeShare, sentimentTone),
+    };
+  });
 
-  return { signals: results.map((r) => r.signal), live: results.some((r) => r.live) };
+  return { signals, live };
 }

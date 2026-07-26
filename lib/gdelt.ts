@@ -28,19 +28,39 @@ function gdeltFallback(keyword: string): GdeltResult {
  *    deterministic fallback that is intentionally NOT cached, so the next call
  *    re-attempts GDELT once it recovers.
  */
-export async function fetchGdeltSignal(keyword: string): Promise<GdeltResult> {
+/** GDELT allows ~1 request / 5s per IP; space sequential calls by this much. */
+export const GDELT_MIN_SPACING_MS = 5500;
+
+export interface FetchGdeltOptions {
+  /**
+   * Per-attempt timeout. GDELT's real latency is ~9s from datacenter IPs, so
+   * the default is generous. Callers on the request hot-path can lower it.
+   */
+  timeoutMs?: number;
+  /** Skip the 30-min cache read (the cron always wants a fresh fetch). */
+  skipCache?: boolean;
+}
+
+export async function fetchGdeltSignal(
+  keyword: string,
+  options: FetchGdeltOptions = {}
+): Promise<GdeltResult> {
+  const { timeoutMs = 12000, skipCache = false } = options;
   const cacheKey = `gdelt:${keyword.toLowerCase().trim()}`;
-  const cached = getCached<GdeltResult>(cacheKey);
-  if (cached) return cached;
+  if (!skipCache) {
+    const cached = getCached<GdeltResult>(cacheKey);
+    if (cached) return cached;
+  }
 
   const encodedQuery = encodeURIComponent(`"${keyword}"`);
   const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodedQuery}&mode=TimelineTone&format=json`;
 
   try {
-    // Fail fast to the fallback when GDELT is unreachable (don't retry timeouts /
-    // network errors — the fallback is cheap). Still retry 429/5xx so rate limits
-    // recover. Short timeout keeps the dashboard's first paint snappy.
-    const res = await fetchWithRetry(url, {}, { timeoutMs: 4000, retryOnNetworkError: false });
+    // GDELT is slow (~9s) and rate-limits with 429 + Retry-After, so use a
+    // generous timeout and let fetchWithRetry back off on 429 (it always
+    // retries 429 and honors Retry-After). Don't retry network errors/timeouts —
+    // the fallback is cheap and we don't want to stack multi-second waits.
+    const res = await fetchWithRetry(url, {}, { timeoutMs, retries: 2, retryOnNetworkError: false });
     if (!res.ok) throw new Error(`GDELT query failed: ${res.status}`);
 
     // GDELT sometimes returns an HTML error page with a 200 — guard JSON parse.
@@ -66,6 +86,23 @@ export async function fetchGdeltSignal(keyword: string): Promise<GdeltResult> {
     console.warn(`GDELT fetch error for "${keyword}", returning fallback:`, (error as Error).message);
     return gdeltFallback(keyword);
   }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Fetch GDELT metrics for several topics SEQUENTIALLY, spacing calls by
+ * ~5.5s to respect GDELT's "1 request / 5s" rate limit. Used by the cron
+ * refresh job — never call this on the request hot-path (it takes
+ * topics.length × ~5.5s). Always fetches fresh (skips the cache).
+ */
+export async function fetchGdeltSignalsSequential(topics: string[]): Promise<GdeltResult[]> {
+  const results: GdeltResult[] = [];
+  for (let i = 0; i < topics.length; i++) {
+    if (i > 0) await sleep(GDELT_MIN_SPACING_MS);
+    results.push(await fetchGdeltSignal(topics[i], { skipCache: true }));
+  }
+  return results;
 }
 
 export function calculateOpportunityScore(volumeShare: number, tone: number): number {

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { SignalItem, SocialPlatform, DripCampaign, LifecycleStage } from '@/types';
 import { X, Sparkles, Send, Bookmark, CheckCircle2, Clock, CalendarClock, Zap, AlertTriangle, Layers, Rocket, Palette, UploadCloud, Paperclip, Film, Users, FileText, PenLine, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
@@ -78,6 +79,7 @@ type PublishMode = 'now' | 'schedule';
 type PublishResult = { mode: PublishMode; scheduledLabel?: string } | null;
 
 export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = false, onToggleSave }) => {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<SocialPlatform>('linkedin');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -901,13 +903,17 @@ export const SignalDetailModal: React.FC<Props> = ({ signal, onClose, isSaved = 
             {isSaved ? 'Saved' : 'Save signal'}
           </button>
 
-          <Link
-            href="/briefs"
+          <button
+            onClick={() => {
+              // A brief is derived from a saved signal — save it first if needed, then open it.
+              if (!isSaved) onToggleSave?.(signal.id);
+              router.push(`/briefs?signal=${signal.id}`);
+            }}
             className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-800 transition"
           >
             <FileText className="w-4 h-4" />
             Create brief
-          </Link>
+          </button>
 
           <button
             onClick={() => setShowCreation((v) => !v)}

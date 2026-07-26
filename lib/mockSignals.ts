@@ -1,8 +1,10 @@
 import { SignalItem } from '@/types';
+import { slug } from '@/lib/slug';
 
-export const MOCK_SIGNALS: SignalItem[] = [
+// Curated topics without ids — the id is derived from the topic below so it
+// stays identical to what buildSignal() produces for the same topic.
+const CURATED: Omit<SignalItem, 'id'>[] = [
   {
-    id: '1',
     topic: 'AI Search',
     volumeShare: 87,
     sentimentTone: 4.2,
@@ -23,7 +25,6 @@ export const MOCK_SIGNALS: SignalItem[] = [
     ]
   },
   {
-    id: '2',
     topic: 'Zero-click Search',
     volumeShare: 82,
     sentimentTone: 2.1,
@@ -44,7 +45,6 @@ export const MOCK_SIGNALS: SignalItem[] = [
     ]
   },
   {
-    id: '3',
     topic: 'Retail Media',
     volumeShare: 73,
     sentimentTone: 1.2,
@@ -65,7 +65,6 @@ export const MOCK_SIGNALS: SignalItem[] = [
     ]
   },
   {
-    id: '4',
     topic: 'Creator AI',
     volumeShare: 64,
     sentimentTone: 3.8,
@@ -86,7 +85,6 @@ export const MOCK_SIGNALS: SignalItem[] = [
     ]
   },
   {
-    id: '5',
     topic: 'Attribution',
     volumeShare: 71,
     sentimentTone: -1.5,
@@ -107,7 +105,6 @@ export const MOCK_SIGNALS: SignalItem[] = [
     ]
   },
   {
-    id: '6',
     topic: 'Influencer Spend',
     volumeShare: 58,
     sentimentTone: 0.8,
@@ -128,3 +125,8 @@ export const MOCK_SIGNALS: SignalItem[] = [
     ]
   }
 ];
+
+export const MOCK_SIGNALS: SignalItem[] = CURATED.map((signal) => ({
+  id: slug(signal.topic),
+  ...signal,
+}));

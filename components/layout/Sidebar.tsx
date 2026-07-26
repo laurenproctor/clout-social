@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Radio, Zap, BarChart3 } from 'lucide-react';
+import { Radio, Zap, BarChart3, FileText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
@@ -14,6 +14,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Signals', icon: Radio },
+  { href: '/briefs', label: 'Briefs', icon: FileText },
   { href: '/studio', label: 'Content Studio', icon: Zap },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
 ];

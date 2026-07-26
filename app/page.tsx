@@ -12,8 +12,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import Link from 'next/link';
 import { Search, Radio, Bell, Zap, BarChart3, Loader2, AlertTriangle, Bookmark, ShieldAlert, Menu, X } from 'lucide-react';
-
-const SAVED_KEY = 'clout.savedSignalIds';
+import { SAVED_KEY, loadSavedIds } from '@/lib/savedSignals';
 
 export default function Home() {
   // Seed with curated topics for instant first paint; replaced by live GDELT data.
@@ -34,12 +33,7 @@ export default function Home() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SAVED_KEY);
-      if (raw) setSavedIds(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
+    setSavedIds(loadSavedIds());
   }, []);
 
   const toggleSaved = useCallback((id: string) => {
@@ -98,6 +92,23 @@ export default function Home() {
   useEffect(() => {
     loadSignals();
   }, [loadSignals]);
+
+  // Deep link: ?signal=<id> opens that signal's modal (from Briefs "Develop content").
+  const [pendingSignalId, setPendingSignalId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('signal');
+    if (id) setPendingSignalId(id);
+  }, []);
+  useEffect(() => {
+    if (!pendingSignalId) return;
+    const match = signals.find((s) => s.id === pendingSignalId);
+    if (match) {
+      setSelectedSignal(match);
+      setPendingSignalId(null);
+      // Drop the param so a later refresh doesn't reopen the modal.
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [pendingSignalId, signals]);
 
   // Instant, offline client-side filter of the currently loaded tiles.
   const filteredSignals = signals.filter(
