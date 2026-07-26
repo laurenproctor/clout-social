@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Theme tokens: the Tailwind `slate` scale reads these CSS vars (see tailwind.config).
+ * Light theme (:root) uses an inverted/tuned ramp so every existing slate-* class
+ * flips automatically; dark theme (.dark) restores the normal slate ramp.
+ * RGB triplets (space-separated) so Tailwind's /opacity modifiers keep working.
+ */
+:root {
+  /* Light theme */
+  --s50: 2 6 23; /* deepest text */
+  --s100: 15 23 42; /* primary text */
+  --s200: 30 41 59;
+  --s300: 51 65 85; /* secondary text */
+  --s400: 100 116 139; /* muted text */
+  --s500: 100 116 139; /* muted text / placeholders */
+  --s600: 71 85 105;
+  --s700: 203 213 225; /* borders */
+  --s800: 226 232 240; /* borders / chips */
+  --s900: 255 255 255; /* cards / header surface */
+  --s950: 248 250 252; /* app background */
+}
+
+.dark {
+  /* Dark theme — the normal Tailwind slate ramp (unchanged look) */
+  --s50: 248 250 252;
+  --s100: 241 245 249;
+  --s200: 226 232 240;
+  --s300: 203 213 225;
+  --s400: 148 163 184;
+  --s500: 100 116 139;
+  --s600: 71 85 105;
+  --s700: 51 65 85;
+  --s800: 30 41 59;
+  --s900: 15 23 42;
+  --s950: 2 6 23;
+}
+
+body {
+  background-color: rgb(var(--s950));
+  color: rgb(var(--s100));
+}
