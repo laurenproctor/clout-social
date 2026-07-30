@@ -9,6 +9,7 @@ import {
 import { fetchWithRetry } from '@/lib/http';
 
 const ZERNIO_API_URL = 'https://zernio.com/api/v1';
+const ZERNIO_CONNECT_FALLBACK = 'https://zernio.com/dashboard/accounts';
 
 function authHeaders() {
   const apiKey = process.env.ZERNIO_API_KEY;
@@ -122,6 +123,60 @@ export async function sendToZernio(payload: ZernioPostPayload) {
   }
 
   return await response.json();
+}
+
+/** First non-empty hosted-connect URL out of a tolerated Zernio response shape. */
+function extractConnectUrl(raw: any): string | null {
+  const candidates = [
+    raw?.url, raw?.connectUrl, raw?.link,
+    raw?.data?.url, raw?.data?.connectUrl, raw?.data?.link,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c.trim();
+  }
+  return null;
+}
+
+/**
+ * Create a hosted Zernio connect link for a platform. The user opens `url`,
+ * authorizes on the network, and Zernio redirects back to `redirectUrl`.
+ *
+ * Assumed contract: POST /accounts/connect { platform, redirectUrl } → { url }.
+ * Tolerates {url|connectUrl|link} at the top level or under `data`. If the
+ * endpoint is absent (404/501) or returns no URL, falls back to a deep-link to
+ * the Zernio dashboard (hosted:false) so the UI always has a usable URL.
+ */
+export async function createConnectLink(
+  platform: SocialPlatform,
+  redirectUrl: string,
+): Promise<{ url: string; hosted: boolean }> {
+  const fallback = process.env.ZERNIO_CONNECT_URL || ZERNIO_CONNECT_FALLBACK;
+
+  // Creating a link is a POST but has no publish side effect; still, keep retries
+  // off for 5xx/network to stay consistent with the other write in this file.
+  const res = await fetchWithRetry(
+    `${ZERNIO_API_URL}/accounts/connect`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ platform, redirectUrl }),
+    },
+    { retryOn5xx: false, retryOnNetworkError: false },
+  );
+
+  // Endpoint not implemented on this Zernio account → deep-link fallback.
+  if (res.status === 404 || res.status === 501) {
+    return { url: fallback, hosted: false };
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Zernio connect link failed: ${res.status}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  const url = extractConnectUrl(data);
+  return url ? { url, hosted: true } : { url: fallback, hosted: false };
 }
 
 /**
