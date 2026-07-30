@@ -3,7 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ZernioAccount, SocialPlatform } from '@/types';
 import { useAccounts } from '@/components/accounts/AccountsProvider';
-import { getPeakTimes, getOptimalTime, getOptimalLabel, formatDateReadable } from '@/lib/schedule';
+import { getPeakTimes, getOptimalTime, getOptimalLabel, formatDateReadable, localInputToUtcISO, isFutureLocal } from '@/lib/schedule';
+import { CHAR_LIMITS } from '@/lib/networkFormats';
 import {
   Linkedin,
   Twitter,
@@ -16,6 +17,7 @@ import {
   CalendarClock,
   Users,
   Plus,
+  Send,
 } from 'lucide-react';
 
 /** One resolved auto-schedule slot for a selected account. */
@@ -32,6 +34,8 @@ interface Props {
   onSelectionChange?: (accountIds: string[]) => void;
   /** Fires when "Auto-Schedule at Peak Times" computes a plan. */
   onAutoSchedule?: (plan: AutoScheduleSlot[]) => void;
+  /** Fires after a successful publish/schedule so the host can refresh its list. */
+  onPublished?: () => void;
 }
 
 // The four publishable networks this component manages.
@@ -42,14 +46,19 @@ const PLATFORMS: { key: SocialPlatform; label: string; Icon: React.ComponentType
   { key: 'instagram', label: 'Instagram', Icon: Instagram },
 ];
 
-export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSchedule }) => {
+export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSchedule, onPublished }) => {
   // Shared selection so the dashboard modal publishes to the same accounts.
-  const { accounts, loading, error, selectedIds, toggle: toggleAccount, setSelected, refresh } = useAccounts();
+  const { accounts, loading, error, selectedIds, selectedAccounts, toggle: toggleAccount, setSelected, refresh } = useAccounts();
   const [autoPlan, setAutoPlan] = useState<AutoScheduleSlot[] | null>(null);
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
   const load = refresh;
   const [connecting, setConnecting] = useState<SocialPlatform | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [composerText, setComposerText] = useState('');
+  const [scheduleLocal, setScheduleLocal] = useState('');
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishOk, setPublishOk] = useState<string | null>(null);
 
   // Open Zernio's hosted connect page in a popup; refresh the account list on close.
   const openConnectPopup = (url: string) => {
@@ -159,6 +168,49 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
     plan.sort((x, y) => (x.scheduledAt < y.scheduledAt ? -1 : 1));
     setAutoPlan(plan);
     onAutoSchedule?.(plan);
+  };
+
+  const doPublish = async (schedule: boolean) => {
+    const accountIds = selectedAccounts.map((a) => a.id);
+    if (accountIds.length === 0 || !composerText.trim()) return;
+
+    // Per-platform character-limit validation before hitting the API (CLAUDE.md rule).
+    const overs = Array.from(new Set(selectedAccounts.map((a) => a.platform)))
+      .filter((p) => composerText.length > CHAR_LIMITS[p]);
+    if (overs.length > 0) {
+      setPublishError(`Over the character limit for: ${overs.join(', ')}.`);
+      return;
+    }
+
+    let scheduledAt: string | undefined;
+    if (schedule) {
+      if (!scheduleLocal || !isFutureLocal(scheduleLocal)) {
+        setPublishError('Pick a future date and time to schedule.');
+        return;
+      }
+      scheduledAt = localInputToUtcISO(scheduleLocal) ?? undefined;
+    }
+
+    setPublishing(true);
+    setPublishError(null);
+    setPublishOk(null);
+    try {
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountIds, content: composerText, scheduledAt }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Publish failed.');
+      setComposerText('');
+      setScheduleLocal('');
+      setPublishOk(scheduledAt ? 'Scheduled.' : 'Published.');
+      onPublished?.();
+    } catch (e) {
+      setPublishError((e as Error).message);
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const selectedCount = selected.size;
@@ -300,6 +352,52 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Composer */}
+        {accounts.length > 0 && (
+          <div className="border border-slate-800 rounded-xl bg-slate-950/40 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-200">Compose &amp; publish</span>
+              <span className="text-[11px] text-slate-500">{selectedCount} account{selectedCount === 1 ? '' : 's'} selected</span>
+            </div>
+            <textarea
+              value={composerText}
+              onChange={(e) => setComposerText(e.target.value)}
+              placeholder="Write your post…"
+              rows={4}
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 resize-y"
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                type="datetime-local"
+                value={scheduleLocal}
+                onChange={(e) => setScheduleLocal(e.target.value)}
+                className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+              />
+              <button
+                onClick={() => doPublish(false)}
+                disabled={publishing || selectedCount === 0 || !composerText.trim()}
+                className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold py-2 px-4 rounded-lg text-sm transition"
+              >
+                <Send className="w-4 h-4" />
+                {publishing ? 'Publishing…' : 'Publish now'}
+              </button>
+              <button
+                onClick={() => doPublish(true)}
+                disabled={publishing || selectedCount === 0 || !composerText.trim()}
+                className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-slate-200 font-semibold py-2 px-4 rounded-lg text-sm transition"
+              >
+                <CalendarClock className="w-4 h-4" />
+                Schedule
+              </button>
+            </div>
+            {selectedCount === 0 && (
+              <p className="text-[11px] text-slate-500">Select at least one connected account above to publish.</p>
+            )}
+            {publishError && <p className="text-[11px] text-amber-300">{publishError}</p>}
+            {publishOk && <p className="text-[11px] text-emerald-400">{publishOk}</p>}
           </div>
         )}
 

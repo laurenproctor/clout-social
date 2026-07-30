@@ -234,7 +234,7 @@ export default function StudioPage() {
         <BrandSettings />
 
         {/* Multi-account publisher + peak-time auto-scheduler */}
-        <ZernioPublisher />
+        <ZernioPublisher onPublished={load} />
 
         {/* Queue table */}
         <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-900/40">
