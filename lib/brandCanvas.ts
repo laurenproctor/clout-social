@@ -2,7 +2,7 @@
 
 import { BrandKit, BrandStyle } from '@/types';
 import { NetworkFormat } from '@/lib/networkFormats';
-import { fontStack } from '@/lib/brandFonts';
+import { resolveFont, cssFamily, ensureFontLoaded } from '@/lib/brandFonts';
 
 export interface RenderInput {
   format: NetworkFormat;
@@ -114,8 +114,14 @@ export async function renderBrandCard(input: RenderInput): Promise<string> {
 
   const margin = Math.round(Math.min(W, H) * 0.07);
   const contentW = W - margin * 2;
-  const display = fontStack(kit.displayFont);
-  const body = fontStack(kit.bodyFont);
+
+  // Resolve display/body fonts (built-in, Google, or custom) and make sure their
+  // glyphs are loaded before we draw, so the canvas doesn't fall back silently.
+  const displayFontDef = resolveFont(kit.displayFont, kit.fonts);
+  const bodyFontDef = resolveFont(kit.bodyFont, kit.fonts);
+  await Promise.all([ensureFontLoaded(displayFontDef), ensureFontLoaded(bodyFontDef)]);
+  const display = cssFamily(displayFontDef);
+  const body = cssFamily(bodyFontDef);
 
   /* --- background --- */
   if (backgroundSrc) {

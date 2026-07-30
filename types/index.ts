@@ -44,6 +44,22 @@ export interface BrandGuidelines {
 /** Visual identity used to render branded social imagery and video. */
 export type BrandStyle = 'bold' | 'minimal' | 'gradient' | 'editorial' | 'playful';
 
+export type FontSource = 'system' | 'google' | 'custom';
+
+/** A typeface available to the brand kit — built-in, a Google Font, or an upload. */
+export interface BrandFont {
+  /** Unique id referenced by BrandKit.displayFont / bodyFont. */
+  key: string;
+  label: string;
+  /** CSS family name to render with (a full stack for system fonts, a name otherwise). */
+  family: string;
+  source: FontSource;
+  /** Data URL of an uploaded font file (custom source only). */
+  dataUrl?: string;
+  /** Weights to request from Google Fonts (google source only). */
+  weights?: number[];
+}
+
 export interface BrandKit {
   brandName: string;
   tagline: string;
@@ -52,12 +68,14 @@ export interface BrandKit {
   accentColor: string;
   backgroundColor: string;
   textColor: string;
-  /** Keys into the curated font-stack map (see lib/brandFonts). */
+  /** Keys into the resolved font registry (built-ins + BrandKit.fonts; see lib/brandFonts). */
   displayFont: string;
   bodyFont: string;
   style: BrandStyle;
   /** Uploaded logo stored as a data URL (kept in localStorage, never sent to a server). */
   logoDataUrl?: string;
+  /** User-added Google Fonts and custom uploads. */
+  fonts?: BrandFont[];
 }
 
 export const DEFAULT_BRAND_KIT: BrandKit = {

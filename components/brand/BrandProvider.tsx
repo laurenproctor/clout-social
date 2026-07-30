@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { BrandGuidelines, BrandKit, DEFAULT_BRAND_KIT } from '@/types';
+import { BrandGuidelines, BrandKit, BrandFont, DEFAULT_BRAND_KIT } from '@/types';
 
 const STORAGE_KEY = 'clout.brandGuidelines';
 const KIT_KEY = 'clout.brandKit';
@@ -26,6 +26,10 @@ interface BrandContextValue {
   clearBrand: () => void;
   updateKit: (patch: Partial<BrandKit>) => void;
   resetKit: () => void;
+  /** Add (or replace by key) a Google/custom font in the kit. */
+  addFont: (font: BrandFont) => void;
+  /** Remove a font by key; reassigns display/body if either used it. */
+  removeFont: (key: string) => void;
 }
 
 const BrandContext = createContext<BrandContextValue | null>(null);
@@ -97,6 +101,37 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const writeKit = (next: BrandKit) => {
+    try {
+      localStorage.setItem(KIT_KEY, JSON.stringify(next));
+    } catch {
+      /* quota exceeded (large custom fonts) — keep in-memory only */
+    }
+  };
+
+  const addFont = useCallback((font: BrandFont) => {
+    setKitState((prev) => {
+      const fonts = [...(prev.fonts ?? []).filter((f) => f.key !== font.key), font];
+      const next = { ...prev, fonts };
+      writeKit(next);
+      return next;
+    });
+  }, []);
+
+  const removeFont = useCallback((key: string) => {
+    setKitState((prev) => {
+      const fonts = (prev.fonts ?? []).filter((f) => f.key !== key);
+      const next = {
+        ...prev,
+        fonts,
+        displayFont: prev.displayFont === key ? DEFAULT_BRAND_KIT.displayFont : prev.displayFont,
+        bodyFont: prev.bodyFont === key ? DEFAULT_BRAND_KIT.bodyFont : prev.bodyFont,
+      };
+      writeKit(next);
+      return next;
+    });
+  }, []);
+
   const setBrand = useCallback((next: BrandGuidelines) => {
     setBrandState(next);
     persist(next);
@@ -121,7 +156,7 @@ export function BrandProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BrandContext.Provider
-      value={{ brand, kit, hydrated, hasGuidelines: isMeaningful(brand), setBrand, updateBrand, clearBrand, updateKit, resetKit }}
+      value={{ brand, kit, hydrated, hasGuidelines: isMeaningful(brand), setBrand, updateBrand, clearBrand, updateKit, resetKit, addFont, removeFont }}
     >
       {children}
     </BrandContext.Provider>
