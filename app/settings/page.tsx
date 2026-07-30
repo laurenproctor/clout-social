@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { SocialPlatform, BrandStyle } from '@/types';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { useBrand } from '@/components/brand/BrandProvider';
-import { FONT_OPTIONS } from '@/lib/brandFonts';
+import { mergedFonts } from '@/lib/brandFonts';
+import { FontManager } from '@/components/brand/FontManager';
 import { NETWORK_FORMATS, NETWORK_ORDER } from '@/lib/networkFormats';
 import { renderBrandCard } from '@/lib/brandCanvas';
 import {
@@ -309,7 +310,7 @@ export default function BrandStudioPage() {
                     onChange={(e) => updateKit({ displayFont: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
                   >
-                    {FONT_OPTIONS.map((f) => (
+                    {mergedFonts(kit.fonts).map((f) => (
                       <option key={f.key} value={f.key}>
                         {f.label}
                       </option>
@@ -323,13 +324,18 @@ export default function BrandStudioPage() {
                     onChange={(e) => updateKit({ bodyFont: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
                   >
-                    {FONT_OPTIONS.map((f) => (
+                    {mergedFonts(kit.fonts).map((f) => (
                       <option key={f.key} value={f.key}>
                         {f.label}
                       </option>
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Google Fonts + custom font upload */}
+              <div className="pt-1 border-t border-slate-800/60">
+                <FontManager />
               </div>
 
               <div className="space-y-1.5">

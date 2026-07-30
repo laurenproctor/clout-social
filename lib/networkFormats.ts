@@ -27,3 +27,13 @@ export const NETWORK_FORMATS: Record<SocialPlatform, NetworkFormat> = {
 };
 
 export const NETWORK_ORDER: SocialPlatform[] = ['linkedin', 'twitter', 'instagram', 'tiktok', 'youtube', 'blog'];
+
+// Per-platform content character limits (Blog is effectively unlimited).
+export const CHAR_LIMITS: Record<SocialPlatform, number> = {
+  twitter: 280,
+  instagram: 2200,
+  tiktok: 2200,
+  linkedin: 3000,
+  youtube: 5000,
+  blog: 100000,
+};

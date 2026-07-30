@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { SignalItem } from '@/types';
-import { Sunrise, Sparkles, TrendingUp, TrendingDown, Clock, ChevronRight } from 'lucide-react';
+import { Star, TrendingUp, TrendingDown, Clock, ChevronRight } from 'lucide-react';
 
 interface Props {
   signals: SignalItem[];
@@ -13,23 +13,16 @@ interface Props {
   onViewBriefing?: () => void;
 }
 
-type Tone = 'emerald' | 'amber' | 'orange';
-
 interface BriefingRow {
   key: string;
   icon: React.ReactNode;
-  tone: Tone;
+  /** Tailwind text color for the row icon. */
+  color: string;
   count: number;
   label: string;
   /** Representative signal this row drills into, if any. */
   pick: SignalItem | null;
 }
-
-const toneStyles: Record<Tone, { chip: string; count: string }> = {
-  emerald: { chip: 'bg-emerald-500/15 text-emerald-400', count: 'text-emerald-300' },
-  amber: { chip: 'bg-amber-500/15 text-amber-400', count: 'text-amber-300' },
-  orange: { chip: 'bg-orange-500/15 text-orange-400', count: 'text-orange-300' },
-};
 
 /** Upper bound of an authority window string like "5-9 days" → 9. */
 function windowUpperDays(window: string): number {
@@ -56,8 +49,8 @@ export const BriefingWidget: React.FC<Props> = ({ signals, onSelectSignal, onVie
     return [
       {
         key: 'asymmetric',
-        icon: <Sparkles className="w-4 h-4" />,
-        tone: 'emerald',
+        icon: <Star className="w-4 h-4" />,
+        color: 'text-emerald-400',
         count: asymmetric.length,
         label: 'asymmetric opportunities',
         pick: asymmetric[0] ?? null,
@@ -65,7 +58,7 @@ export const BriefingWidget: React.FC<Props> = ({ signals, onSelectSignal, onVie
       {
         key: 'rising',
         icon: <TrendingUp className="w-4 h-4" />,
-        tone: 'emerald',
+        color: 'text-emerald-400',
         count: rising.length,
         label: 'rising topics',
         pick: rising[0] ?? null,
@@ -73,7 +66,7 @@ export const BriefingWidget: React.FC<Props> = ({ signals, onSelectSignal, onVie
       {
         key: 'losing',
         icon: <TrendingDown className="w-4 h-4" />,
-        tone: 'orange',
+        color: 'text-amber-400',
         count: losing.length,
         label: 'topics losing momentum',
         pick: losing[0] ?? null,
@@ -81,7 +74,7 @@ export const BriefingWidget: React.FC<Props> = ({ signals, onSelectSignal, onVie
       {
         key: 'closing',
         icon: <Clock className="w-4 h-4" />,
-        tone: 'amber',
+        color: 'text-orange-400',
         count: closing.length,
         label: 'authority windows closing',
         pick: closing[0] ?? null,
@@ -105,20 +98,19 @@ export const BriefingWidget: React.FC<Props> = ({ signals, onSelectSignal, onVie
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
       aria-labelledby="briefing-heading"
-      className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-lg backdrop-blur-sm"
+      className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg backdrop-blur-sm"
     >
-      <div className="flex items-center gap-2 mb-4">
-        <span className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
-          <Sunrise className="w-4 h-4" />
+      <div className="flex items-center gap-2">
+        <span className="text-amber-400 text-sm" aria-hidden="true">
+          💡
         </span>
-        <h2 id="briefing-heading" className="text-sm font-bold text-slate-100 tracking-tight">
+        <h2 id="briefing-heading" className="font-bold text-sm text-slate-100 tracking-tight">
           Today&apos;s Briefing
         </h2>
       </div>
 
-      <ul className="space-y-1">
+      <ul className="space-y-2 text-xs font-medium">
         {rows.map((row) => {
-          const tone = toneStyles[row.tone];
           const interactive = Boolean(row.pick);
           return (
             <li key={row.key}>
@@ -126,20 +118,21 @@ export const BriefingWidget: React.FC<Props> = ({ signals, onSelectSignal, onVie
                 type="button"
                 onClick={() => handleRow(row)}
                 disabled={!interactive}
-                className={`group w-full flex items-center gap-3 rounded-xl px-2 py-2 text-left transition ${
-                  interactive ? 'hover:bg-slate-800/60 cursor-pointer' : 'cursor-default opacity-70'
+                className={`group w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-800/40 border border-slate-800/40 text-left transition ${
+                  interactive ? 'hover:bg-slate-800/80 cursor-pointer' : 'cursor-default opacity-60'
                 }`}
               >
-                <span className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center ${tone.chip}`}>
-                  {row.icon}
+                <span className="flex items-center gap-2.5 text-slate-200">
+                  <span className={`shrink-0 ${row.color}`}>{row.icon}</span>
+                  <span>
+                    <span className="tabular-nums font-semibold">{row.count}</span> {row.label}
+                  </span>
                 </span>
-                <span className="flex-1 min-w-0 text-[13px] text-slate-300">
-                  <span className={`font-bold tabular-nums ${tone.count}`}>{row.count}</span>{' '}
-                  {row.label}
-                </span>
-                {interactive && (
-                  <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-300 group-hover:translate-x-0.5 transition shrink-0" />
-                )}
+                <ChevronRight
+                  className={`w-4 h-4 text-slate-500 shrink-0 transition ${
+                    interactive ? 'group-hover:text-slate-300 group-hover:translate-x-0.5' : ''
+                  }`}
+                />
               </button>
             </li>
           );
@@ -149,10 +142,9 @@ export const BriefingWidget: React.FC<Props> = ({ signals, onSelectSignal, onVie
       <button
         type="button"
         onClick={handleCta}
-        className="mt-4 inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold px-4 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+        className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 px-4 rounded-xl text-xs transition shadow-md shadow-emerald-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
       >
         View briefing
-        <ChevronRight className="w-3.5 h-3.5" />
       </button>
     </motion.section>
   );
