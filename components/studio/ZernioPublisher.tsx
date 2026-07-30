@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   CalendarClock,
   Users,
+  Plus,
 } from 'lucide-react';
 
 /** One resolved auto-schedule slot for a selected account. */
@@ -47,10 +48,62 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
   const [autoPlan, setAutoPlan] = useState<AutoScheduleSlot[] | null>(null);
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
   const load = refresh;
+  const [connecting, setConnecting] = useState<SocialPlatform | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  // Open Zernio's hosted connect page in a popup; refresh the account list on close.
+  const openConnectPopup = (url: string) => {
+    const w = 600, h = 720;
+    const x = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
+    const y = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
+    const popup = window.open(url, 'zernio-connect', `width=${w},height=${h},left=${x},top=${y}`);
+    if (!popup) {
+      // Popups blocked → fall back to a same-tab redirect (Zernio returns to /content?connected=).
+      window.location.assign(url);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (popup.closed) {
+        window.clearInterval(timer);
+        setConnecting(null);
+        refresh();
+      }
+    }, 800);
+  };
+
+  const handleConnect = async (platform: SocialPlatform) => {
+    setConnecting(platform);
+    setConnectError(null);
+    try {
+      const res = await fetch('/api/accounts/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform }),
+      });
+      const data = await res.json();
+      if (!data.url) throw new Error(data.error || 'Could not start the connect flow.');
+      openConnectPopup(data.url);
+    } catch (e) {
+      setConnectError((e as Error).message);
+      setConnecting(null);
+    }
+  };
 
   useEffect(() => {
     onSelectionChange?.(selectedIds);
   }, [selectedIds, onSelectionChange]);
+
+  // If Zernio returned to /content?connected=<platform> (popup blocked / same-tab),
+  // refresh the account list and strip the param.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('connected')) {
+      refresh();
+      params.delete('connected');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
+  }, [refresh]);
 
   // Group connected accounts under the four managed platforms.
   const grouped = useMemo(() => {
@@ -141,6 +194,13 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
           </div>
         )}
 
+        {connectError && accounts.length > 0 && (
+          <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-xl text-amber-300 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{connectError}</span>
+          </div>
+        )}
+
         {loading && accounts.length === 0 && (
           <p className="text-sm text-slate-500 py-6 text-center">Loading connected accounts…</p>
         )}
@@ -149,9 +209,23 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
           <div className="py-8 text-center">
             <Users className="w-8 h-8 text-slate-600 mx-auto mb-3" />
             <p className="text-slate-300 font-semibold">No connected accounts</p>
-            <p className="text-slate-500 text-xs mt-1">
-              Connect LinkedIn, Twitter/X, TikTok, or Instagram in your Zernio workspace to publish here.
+            <p className="text-slate-500 text-xs mt-1 mb-4">
+              Connect an account to publish from Clout. You&apos;ll authorize in a Zernio window, then return here.
             </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {PLATFORMS.map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => handleConnect(key)}
+                  disabled={connecting !== null}
+                  className="flex items-center gap-2 text-xs font-semibold text-slate-200 bg-slate-900 border border-slate-800 px-3 py-2 rounded-lg hover:bg-slate-800 disabled:opacity-60"
+                >
+                  <Icon className="w-3.5 h-3.5 text-slate-400" />
+                  {connecting === key ? 'Opening…' : `Connect ${label}`}
+                </button>
+              ))}
+            </div>
+            {connectError && <p className="text-[11px] text-amber-300 mt-3">{connectError}</p>}
           </div>
         )}
 
@@ -169,14 +243,24 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
                       {label}
                       <span className="text-[11px] text-slate-500 font-normal">({accts.length})</span>
                     </span>
-                    {accts.length > 0 && (
+                    <span className="flex items-center gap-2">
+                      {accts.length > 0 && (
+                        <button
+                          onClick={() => togglePlatform(key, !allOn)}
+                          className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300"
+                        >
+                          {allOn ? 'Clear' : 'Select all'}
+                        </button>
+                      )}
                       <button
-                        onClick={() => togglePlatform(key, !allOn)}
-                        className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300"
+                        onClick={() => handleConnect(key)}
+                        disabled={connecting !== null}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-60"
                       >
-                        {allOn ? 'Clear' : 'Select all'}
+                        <Plus className="w-3 h-3" />
+                        {connecting === key ? 'Opening…' : 'Connect'}
                       </button>
-                    )}
+                    </span>
                   </div>
 
                   {accts.length === 0 ? (
