@@ -40,7 +40,7 @@ import { useBrand } from '@/components/brand/BrandProvider';
 import { useAccounts } from '@/components/accounts/AccountsProvider';
 import { PostPreview, PreviewAuthor } from '@/components/dashboard/PostPreview';
 import { renderBrandCard } from '@/lib/brandCanvas';
-import { NETWORK_FORMATS } from '@/lib/networkFormats';
+import { NETWORK_FORMATS, CHAR_LIMITS } from '@/lib/networkFormats';
 import {
   getPlusHours,
   getTomorrowMorning,
@@ -51,16 +51,6 @@ import {
   isFutureLocal,
   formatLocalReadable,
 } from '@/lib/schedule';
-
-// Per-platform content character limits (Blog is effectively unlimited).
-const CHAR_LIMITS: Record<SocialPlatform, number> = {
-  twitter: 280,
-  instagram: 2200,
-  tiktok: 2200,
-  linkedin: 3000,
-  youtube: 5000,
-  blog: 100000,
-};
 
 // The six networks a post can be composed for, in display order.
 const NETWORKS: { id: SocialPlatform; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
