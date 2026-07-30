@@ -292,29 +292,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Sub-navigation — switch the heatmap's active dimension */}
-          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-800/60 -mt-2">
-            {DIMENSION_TABS.map((tab) => {
-              const Icon = tab.icon;
-              const active = dimension === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setDimension(tab.key)}
-                  aria-pressed={active}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold whitespace-nowrap border-b-2 -mb-px transition ${
-                    active
-                      ? 'border-emerald-500 text-emerald-400'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
           {error && (
             <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-xl text-amber-300 text-xs flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -322,10 +299,34 @@ export default function Home() {
             </div>
           )}
 
-          {/* Content + desktop right rail (briefing / signals to watch) */}
-          <div className="flex flex-col xl:flex-row gap-6 items-start">
-            {/* Interactive Heatmap — instant client-filtered tiles */}
-            <div className="flex-1 min-w-0 w-full">
+          {/* 2-column desktop layout: heatmap (left) + right rail (briefing / signals to watch) */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Left zone — sub-navigation + interactive heatmap */}
+            <div className="lg:col-span-3 min-w-0">
+              {/* Sub-navigation — switch the heatmap's active dimension */}
+              <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-800/60 mb-6">
+                {DIMENSION_TABS.map((tab) => {
+                  const Icon = tab.icon;
+                  const active = dimension === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setDimension(tab.key)}
+                      aria-pressed={active}
+                      className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold whitespace-nowrap border-b-2 -mb-px transition ${
+                        active
+                          ? 'border-emerald-500 text-emerald-400'
+                          : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Interactive Heatmap — instant client-filtered tiles */}
               {filteredSignals.length === 0 ? (
                 <div className="py-16 text-center text-slate-500 text-sm">
                   {savedOnly ? (
@@ -353,8 +354,8 @@ export default function Home() {
               )}
             </div>
 
-            {/* Right rail — desktop only */}
-            <aside className="hidden xl:flex xl:flex-col gap-5 w-80 shrink-0">
+            {/* Right zone — briefing + signals to watch, stacked vertically */}
+            <aside className="lg:col-span-1 flex flex-col gap-5 min-w-0">
               <BriefingWidget
                 signals={signals}
                 onSelectSignal={(s) => setSelectedSignal(s)}
