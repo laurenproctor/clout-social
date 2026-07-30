@@ -54,6 +54,7 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
   const load = refresh;
   const [connecting, setConnecting] = useState<SocialPlatform | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [hostedHint, setHostedHint] = useState(false);
   const [composerText, setComposerText] = useState('');
   const [scheduleLocal, setScheduleLocal] = useState('');
   const [publishing, setPublishing] = useState(false);
@@ -62,6 +63,11 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
 
   // Open Zernio's hosted connect page in a popup; refresh the account list on close.
   const openConnectPopup = (url: string) => {
+    if (!/^https?:\/\//i.test(url)) {
+      setConnectError('Received an invalid connect link.');
+      setConnecting(null);
+      return;
+    }
     const w = 600, h = 720;
     const x = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
     const y = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
@@ -91,6 +97,7 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
       });
       const data = await res.json();
       if (!data.url) throw new Error(data.error || 'Could not start the connect flow.');
+      setHostedHint(data.hosted === false);
       openConnectPopup(data.url);
     } catch (e) {
       setConnectError((e as Error).message);
@@ -252,6 +259,11 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
             <span>{connectError}</span>
           </div>
         )}
+        {hostedHint && accounts.length > 0 && (
+          <p className="text-[11px] text-slate-400 mt-2">
+            Finish connecting in the Zernio tab, then return here — your account will appear automatically.
+          </p>
+        )}
 
         {loading && accounts.length === 0 && (
           <p className="text-sm text-slate-500 py-6 text-center">Loading connected accounts…</p>
@@ -278,6 +290,11 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
               ))}
             </div>
             {connectError && <p className="text-[11px] text-amber-300 mt-3">{connectError}</p>}
+            {hostedHint && (
+              <p className="text-[11px] text-slate-400 mt-2">
+                Finish connecting in the Zernio tab, then return here — your account will appear automatically.
+              </p>
+            )}
           </div>
         )}
 
@@ -364,7 +381,7 @@ export const ZernioPublisher: React.FC<Props> = ({ onSelectionChange, onAutoSche
             </div>
             <textarea
               value={composerText}
-              onChange={(e) => setComposerText(e.target.value)}
+              onChange={(e) => { setComposerText(e.target.value); if (publishOk) setPublishOk(null); }}
               placeholder="Write your post…"
               rows={4}
               className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 resize-y"
